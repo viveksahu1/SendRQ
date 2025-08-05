@@ -13,8 +13,8 @@
         placeholder="https://api.example.com/data"
         class="flex-1 border rounded p-2"
       />
-      <button @click="sendRequest" class="bg-blue-600 text-white px-4 py-2 rounded">
-        Send
+      <button @click="sendRequest" class="bg-blue-600 text-white px-4 py-2 rounded" :disabled="loading">
+        {{ loading ? 'Sending...' : 'Send' }}
       </button>
     </div>
 
@@ -32,12 +32,15 @@
       :response="response"
       :status="status"
       :timeTaken="timeTaken"
+      :loading="loading"
+      :error="error"
     />
   </div>
 </template>
 
 <script setup>
-import { ref, computed } from 'vue';
+import { ref } from 'vue';
+import axios from 'axios';
 import ResponseView from './ResponseView.vue';
 
 const method = ref('GET');
@@ -46,6 +49,8 @@ const requestBody = ref('');
 const response = ref(null);
 const status = ref('');
 const timeTaken = ref(0);
+const loading = ref(false);
+const error = ref(null);
 
 async function sendRequest() {
   if (!url.value) {
@@ -53,39 +58,42 @@ async function sendRequest() {
     return;
   }
 
+  loading.value = true;
   response.value = null;
   status.value = '';
   timeTaken.value = 0;
+  error.value = null;
 
   const options = {
     method: method.value,
+    url: url.value,
     headers: { 'Content-Type': 'application/json' },
   };
 
   if (method.value !== 'GET' && requestBody.value.trim() !== '') {
     try {
-      options.body = JSON.stringify(JSON.parse(requestBody.value));
+      options.data = JSON.parse(requestBody.value);
     } catch (e) {
-      alert('Invalid JSON in request body');
+      error.value = 'Invalid JSON in request body';
+      loading.value = false;
       return;
     }
   }
 
   const start = performance.now();
   try {
-    const res = await fetch(url.value, options);
+    const res = await axios(options);
     status.value = `${res.status} ${res.statusText}`;
-
-    const contentType = res.headers.get('content-type') || '';
-    if (contentType.includes('application/json')) {
-      response.value = await res.json();
-    } else {
-      response.value = await res.text();
-    }
+    response.value = res.data;
   } catch (err) {
-    response.value = String(err);
+    error.value = String(err);
+    if (err.response) {
+      status.value = `${err.response.status} ${err.response.statusText}`;
+      response.value = err.response.data;
+    }
   } finally {
     timeTaken.value = Math.round(performance.now() - start);
+    loading.value = false;
   }
 }
 </script>
